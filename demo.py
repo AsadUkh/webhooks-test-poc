@@ -1,29 +1,36 @@
 import os
-import subprocess
 import requests
+import git
+import tempfile
+import shutil
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'dfksigw5f')
-API_KEY = os.getenv('CLOUDINARY_API_KEY', '272356752637981')
-API_SECRET = os.getenv('CLOUDINARY_API_SECRET', '672xGcI9hd6fBdlw5h2TyRVgD14')
+CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'your-cloud-name')
+API_KEY = os.getenv('CLOUDINARY_API_KEY', 'your-api-key')
+API_SECRET = os.getenv('CLOUDINARY_API_SECRET', 'your-api-secret')
 UPLOAD_PRESET = 'ml_default'
 
-def get_modified_files():
-    modified_files = subprocess.check_output(['git', 'diff', '--name-only', 'HEAD^', 'HEAD'], text=True).splitlines()
-    new_files = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard'], text=True).splitlines()
-    all_files = modified_files + new_files
-    filtered_files = [f for f in all_files if not (f.startswith('node_modules/') or f.startswith('.git/'))]
-    return filtered_files
+def clone_repo(repo_url):
+    """Clone the repository into a temporary directory."""
+    temp_dir = tempfile.mkdtemp()  # Create a temporary directory to clone the repo
+    try:
+        print(f"Cloning repository {repo_url} into {temp_dir}...")
+        repo = git.Repo.clone_from(repo_url, temp_dir)
+        return temp_dir, repo
+    except Exception as e:
+        print(f"Error cloning repository: {e}")
+        return None, None
 
-def upload_file_to_cloudinary(file_path):
+def upload_file_to_cloudinary(file_path, commit_hash):
+    """Upload the file to Cloudinary."""
     with open(file_path, 'rb') as file:
         upload_url = f'https://api.cloudinary.com/v1_1/{CLOUD_NAME}/raw/upload'
         files = {'file': file}
         data = {
             'upload_preset': UPLOAD_PRESET,
-            'public_id': file_path,
+            'public_id': f"{commit_hash}_{file_path}",  # Unique public ID based on commit
         }
         response = requests.post(upload_url, data=data, files=files, auth=(API_KEY, API_SECRET))
         if response.status_code == 200:
@@ -43,23 +50,55 @@ def handle_webhook():
         # Handle the GitHub webhook event (e.g., on push or pull request)
         payload = request.json
 
-        # Check if it's a push event and only proceed if there are modified files
+        # Extract the repository URL from the payload
+        repo_url = payload['repository']['clone_url']
+        print(f"Cloning repository from {repo_url}...")
+
+        # Ensure it's a push event and only proceed if there are modified files
         if payload.get('ref') == 'refs/heads/main':  # Ensure it's a push to the main branch
             print(f"Processing push event to the main branch")
 
-            # Get the list of changed files
-            changed_files = get_modified_files()
-            if not changed_files:
-                return jsonify({'message': 'No modified files found to upload'}), 200
+            # Clone the repo into a temporary directory
+            repo_path, repo = clone_repo(repo_url)
+            if not repo_path:
+                return jsonify({'error': 'Failed to clone the repository'}), 500
 
-            print(f'Files to upload: {changed_files}')
+            # Extract the commit details
+            commits = payload.get('commits', [])
+            if not commits:
+                shutil.rmtree(repo_path)  # Clean up the repo directory
+                return jsonify({'error': 'No commits in the push event'}), 400
 
-            # Upload the files to Cloudinary
-            for file_path in changed_files:
-                if os.path.isfile(file_path):
-                    upload_file_to_cloudinary(file_path)
-                else:
-                    print(f'No valid file found for: {file_path}')
+            # Process each commit in the push event
+            for commit in commits:
+                commit_hash = commit['id']
+                commit_message = commit['message']
+                print(f"Processing commit {commit_hash}: {commit_message}")
+
+                # Extract the changed files from the commit
+                modified_files = commit.get('modified', [])
+                added_files = commit.get('added', [])
+                removed_files = commit.get('removed', [])
+
+                all_files = modified_files + added_files + removed_files
+                filtered_files = [f for f in all_files if not (f.startswith('node_modules/') or f.startswith('.git/'))]
+
+                if not filtered_files:
+                    print(f"No valid files in commit {commit_hash} to upload.")
+                    continue
+
+                # Upload each file to Cloudinary
+                for file_path in filtered_files:
+                    # Construct the full path to the file
+                    full_file_path = os.path.join(repo_path, file_path)
+                    if os.path.isfile(full_file_path):
+                        print(f'Uploading {full_file_path} to Cloudinary...')
+                        upload_file_to_cloudinary(full_file_path, commit_hash)
+                    else:
+                        print(f'No valid file found for: {full_file_path}')
+
+            # Clean up the cloned repo directory
+            shutil.rmtree(repo_path)
 
             return jsonify({'message': 'Files uploaded successfully'}), 200
         else:
