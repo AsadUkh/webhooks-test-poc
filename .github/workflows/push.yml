@@ -1,35 +1,39 @@
-name: Upload Files to Cloudinary on Push/Merge
+name: Upload Changed Files to Cloudinary
 
 on:
   push:
     branches:
-      - main  
+      - main
   pull_request:
     branches:
-      - main 
+      - main
 
 jobs:
   upload_files_to_cloudinary:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
+    - name: Checkout code with full history
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Fetch full commit history for accurate diff
 
     - name: Set up Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: '14'  # You can use the version you need
+        node-version: '14'
 
     - name: Install dependencies
       run: |
-        npm install axios  # Axios to handle HTTP requests
+        npm install axios
 
-    # Upload changed files to Cloudinary
     - name: Upload changed files to Cloudinary
       run: |
         # Get list of files that were modified in the commit
         FILES_CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+
+        # Debugging: List files
+        echo "Changed files: $FILES_CHANGED"
 
         # Iterate over the changed files and upload them to Cloudinary
         for FILE in $FILES_CHANGED; do
@@ -40,7 +44,9 @@ jobs:
             curl -X POST "https://api.cloudinary.com/v1_1/${{ secrets.CLOUDINARY_CLOUD_NAME }}/raw/upload" \
               -F "file=@$FILE" \
               -F "upload_preset=ml_default" \
-              -F “public_id=@$FILE” \
+              -F "public_id=$FILE" \
               -u "${{ secrets.CLOUDINARY_API_KEY }}:${{ secrets.CLOUDINARY_API_SECRET }}"
+          else
+            echo "No file found for: $FILE"
           fi
         done
