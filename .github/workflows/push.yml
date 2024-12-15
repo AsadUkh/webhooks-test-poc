@@ -13,42 +13,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout code
       - name: Checkout code with full history
         uses: actions/checkout@v2
         with:
           fetch-depth: 0  # Fetch full commit history for accurate diff
 
-      - name: Debugging: Print Git status and environment
-        run: |
-          echo "Current working directory:"
-          pwd
-          echo "List of files in the repo:"
-          ls -R
-          echo "Git status:"
-          git status
-          echo "Git diff between commits:"
-          git diff --name-only ${{ github.event.before }} ${{ github.sha }}
-          echo "List of new (untracked) files:"
-          git ls-files --others --exclude-standard
+      # Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'  # Use Node.js 18 or specify the version you need
 
+      # # Install dependencies
+      # - name: Install dependencies
+      #   run: |
+      #     npm install  # Install the necessary dependencies (ensure package.json exists)
+
+      # Upload changed files to Cloudinary
       - name: Upload changed files to Cloudinary
         run: |
           # Get list of modified files in the commit (including renames)
           MODIFIED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
-          echo "Modified Files: $MODIFIED_FILES"
-
+          
           # Get list of new files added to the staging area (files that are added but not yet committed)
           NEW_FILES=$(git ls-files --others --exclude-standard)
-          echo "New Files: $NEW_FILES"
 
-          # Combine both lists (modified and new files) and filter out unwanted files
-          FILES_CHANGED=$(printf "%s\n%s" "$MODIFIED_FILES" "$NEW_FILES" | grep -vE '(^node_modules/|^\.git/)')
+          # Combine both lists (modified and new files)
+          FILES_CHANGED="$MODIFIED_FILES $NEW_FILES"
+          
+          # Filter out node_modules and other unwanted files
+          FILES_CHANGED=$(echo "$FILES_CHANGED" | grep -vE '(^node_modules/|^\.git/)')
 
           # Debugging: Show filtered list
-          echo "Filtered Files to upload: $FILES_CHANGED"
+          echo "Files to upload: $FILES_CHANGED"
 
           # Iterate over the changed files and upload them to Cloudinary
-          while IFS= read -r FILE; do
+          for FILE in $FILES_CHANGED; do
             if [[ -f "$FILE" ]]; then
               echo "Uploading $FILE to Cloudinary..."
 
@@ -61,4 +62,4 @@ jobs:
             else
               echo "No valid file found for: $FILE"
             fi
-          done <<< "$FILES_CHANGED"
+          done
