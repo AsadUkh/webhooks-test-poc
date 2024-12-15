@@ -41,18 +41,14 @@ jobs:
           NEW_FILES=$(git ls-files --others --exclude-standard)
           echo "New Files: $NEW_FILES"
 
-          # Combine both lists (modified and new files)
-          FILES_CHANGED="$MODIFIED_FILES $NEW_FILES"
-          echo "Files to upload: $FILES_CHANGED"
-
-          # Filter out node_modules and other unwanted files
-          FILES_CHANGED=$(echo "$FILES_CHANGED" | grep -vE '(^node_modules/|^\.git/)')
+          # Combine both lists (modified and new files) and filter out unwanted files
+          FILES_CHANGED=$(printf "%s\n%s" "$MODIFIED_FILES" "$NEW_FILES" | grep -vE '(^node_modules/|^\.git/)')
 
           # Debugging: Show filtered list
           echo "Filtered Files to upload: $FILES_CHANGED"
 
           # Iterate over the changed files and upload them to Cloudinary
-          for FILE in $FILES_CHANGED; do
+          while IFS= read -r FILE; do
             if [[ -f "$FILE" ]]; then
               echo "Uploading $FILE to Cloudinary..."
 
@@ -65,4 +61,4 @@ jobs:
             else
               echo "No valid file found for: $FILE"
             fi
-          done
+          done <<< "$FILES_CHANGED"
