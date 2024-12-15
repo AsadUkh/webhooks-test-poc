@@ -7,9 +7,15 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'your-cloud-name')
-API_KEY = os.getenv('CLOUDINARY_API_KEY', 'your-api-key')
-API_SECRET = os.getenv('CLOUDINARY_API_SECRET', 'your-api-secret')
+# Cloud Name. dfksigw5f
+# API KEY : 272356752637981
+# API Secret : 672xGcI9hd6fBdlw5h2TyRVgD14
+# Upload preset : ml_default
+
+
+CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'dfksigw5f')
+API_KEY = os.getenv('CLOUDINARY_API_KEY', '272356752637981')
+API_SECRET = os.getenv('CLOUDINARY_API_SECRET', '672xGcI9hd6fBdlw5h2TyRVgD14')
 UPLOAD_PRESET = 'ml_default'
 
 def clone_repo(repo_url):
