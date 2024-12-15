@@ -18,15 +18,6 @@ jobs:
       with:
         fetch-depth: 0  # Fetch full commit history for accurate diff
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v2
-      with:
-        node-version: '14'
-
-    - name: Install dependencies
-      run: |
-        npm install axios
-
     - name: Upload changed files to Cloudinary
       run: |
         # Get list of modified files in the commit (including renames)
@@ -37,6 +28,9 @@ jobs:
 
         # Combine both lists (modified and new files)
         FILES_CHANGED="$MODIFIED_FILES $NEW_FILES"
+
+        # Filter out node_modules and other unwanted files
+        FILES_CHANGED=$(echo "$FILES_CHANGED" | grep -vE '(^node_modules/|^\.git/)')
 
         # Debugging: List files
         echo "Files to upload: $FILES_CHANGED"
